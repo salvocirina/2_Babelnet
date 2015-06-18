@@ -1,8 +1,6 @@
 
-import edu.mit.jwi.item.IPointer;
 import it.uniroma1.lcl.babelnet.BabelNet;
 import it.uniroma1.lcl.babelnet.BabelNetConfiguration;
-import it.uniroma1.lcl.babelnet.BabelSense;
 import it.uniroma1.lcl.babelnet.BabelSynset;
 import it.uniroma1.lcl.babelnet.BabelSynsetID;
 import it.uniroma1.lcl.babelnet.BabelSynsetIDRelation;
@@ -18,28 +16,26 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 
 public class Main {
 
-    static HashMap <String, String> lemmaMap;
+    static HashMap<String, String> lemmaMap;
     static BabelNet bn;
-    
+    static boolean relations, rescaling;
+    static BabelPointer kindOfRelations;
+
     public static void main(String[] args) {
         Main m = new Main();
         bn = BabelNet.getInstance();
         lemmaMap = getLemmaMap();
+        relations = true;
+        kindOfRelations = BabelPointer.HYPERNYM;
+        rescaling = true;
+
         //Variabile che conterrá le configurazioni base di Babelnet
         BabelNetConfiguration conf = BabelNetConfiguration.getInstance();
         conf.setConfigurationFile(new File("config/babelnet.properties"));
-
- 
-//        Properties props = new Properties();
-//        props.put("annotators", "tokenize, ssplit, pos, lemma");
-//        StanfordCoreNLP pipeline = new StanfordCoreNLP(props);
 
         //array di contesti per la parola pianta e testa
         String[] contestiPianta = {
@@ -48,120 +44,118 @@ public class Main {
         String[] contestiTesta = {
             "Si tratta di un uomo facilmente riconoscibile: ha una testa piccola, gli occhi sporgenti, naso adunco e piccole orecchie a sventola.",
             "Come per tutte le cose, ci vorrebbe un po' di testa, un minimo di ragione, una punta di cervello, per non prendere decisioni fuori dal senso dell'intelletto."};
-        
+
         String[] words = {"pianta", "testa"};
-        
-        
+
         //aggiunta dei contesti pianta nella lista principale
-        ArrayList<String> lista_contesti_pianta = new ArrayList<String>();
+        ArrayList<String> lista_contesti_pianta = new ArrayList<>();
         lista_contesti_pianta.addAll(Arrays.asList(contestiPianta));
-         //aggiunta dei contesti testa nella lista principale
-        ArrayList<String> lista_contesti_testa = new ArrayList<String>();
+        //aggiunta dei contesti testa nella lista principale
+        ArrayList<String> lista_contesti_testa = new ArrayList<>();
         lista_contesti_testa.addAll(Arrays.asList(contestiTesta));
-        
-        
+
         //rimuoviamo le stopwords a contesti pianta
-        ArrayList<ArrayList<String>> contesti_pianta_noStopwords = new ArrayList<ArrayList<String>>();
-        for(int i = 0; i < lista_contesti_pianta.size(); i++)
-        {
-            contesti_pianta_noStopwords.add(removeStopwordsFromContexts(lista_contesti_pianta.get(i)));
+        ArrayList<ArrayList<String>> contesti_pianta_noStopwords = new ArrayList<>();
+        for (String contesto_pianta : lista_contesti_pianta) {
+            contesti_pianta_noStopwords.add(removeStopwordsFromContexts(contesto_pianta));
         }
-        
+
         ArrayList<ArrayList<String>> lista_lemmi_contesti_pianta = getLemsFromContexts(contesti_pianta_noStopwords);
-//        System.out.println(lista_lemmi_contesti_pianta);
-        
+
         //rimuoviamo le stopwords a contesti testa
-        ArrayList<ArrayList<String>> contesti_testa_noStopwords = new ArrayList<ArrayList<String>>();
-        for(int i = 0; i < lista_contesti_testa.size(); i++)
-        {
-            contesti_testa_noStopwords.add(removeStopwordsFromContexts(lista_contesti_testa.get(i)));
+        ArrayList<ArrayList<String>> contesti_testa_noStopwords = new ArrayList<>();
+        for (String contesto_testa : lista_contesti_testa) {
+            contesti_testa_noStopwords.add(removeStopwordsFromContexts(contesto_testa));
         }
-        
+
         ArrayList<ArrayList<String>> lista_lemmi_contesti_testa = getLemsFromContexts(contesti_testa_noStopwords);
-//        System.out.println(lista_lemmi_contesti_testa);
-        
-        
+
         ArrayList<BabelSynset> lista_synset_parole = getSynsetsFromWord(words[0]);
-        
+
         BabelSynsetID id;
-        
-        for(int i = 0; i < contestiPianta.length; i++)
-        {
+
+        for (int i = 0; i < contestiPianta.length; i++) {
             int max_overlap = 0;
             int index = 0;
-            for(int j = 0; j < lista_synset_parole.size(); j++)
-            {
+            int num_glosses = 0;
+            for (int j = 0; j < lista_synset_parole.size(); j++) {
                 int overlap = 0;
                 ArrayList<BabelGloss> glosse_parola = (ArrayList<BabelGloss>) lista_synset_parole.get(j).getGlosses(Language.IT);
-                ArrayList<BabelSynsetIDRelation> lista_relazioni = ( ArrayList<BabelSynsetIDRelation>) lista_synset_parole.get(j).getEdges(BabelPointer.HYPERNYM);
-                for(int k = 0; k < lista_relazioni.size(); k++)
-                {
-                    id = lista_relazioni.get(k).getBabelSynsetIDTarget();
-                    glosse_parola.addAll(bn.getSynset(id).getGlosses(Language.IT));
+                if (relations) {
+                    ArrayList<BabelSynsetIDRelation> lista_relazioni = (ArrayList<BabelSynsetIDRelation>) lista_synset_parole.get(j).getEdges(kindOfRelations);
+                    for (BabelSynsetIDRelation relazione : lista_relazioni) {
+                        id = relazione.getBabelSynsetIDTarget();
+                        glosse_parola.addAll(bn.getSynset(id).getGlosses(Language.IT));
+                    }
                 }
                 ArrayList<String> lista_string_glossa = new ArrayList<>();
-                ArrayList<ArrayList<String>> lista_glosse_noStopword = new ArrayList<>();
-                for(int z = 0; z < glosse_parola.size(); z++)
-                {
-                    lista_string_glossa.add(glosse_parola.get(z).getGloss());
+                ArrayList<ArrayList<String>> lista_glosse_noStopword;
+                for (BabelGloss glossa_parola : glosse_parola) {
+                    lista_string_glossa.add(glossa_parola.getGloss());
                 }
                 lista_glosse_noStopword = removeStopwordsFromList(lista_string_glossa);
-                lista_glosse_noStopword = getLemsFromContexts(lista_glosse_noStopword);   
-                for(int x = 0; x < lista_glosse_noStopword.size(); x++)
-                {
-                    overlap += computer_overlap(lista_lemmi_contesti_pianta.get(i), lista_glosse_noStopword.get(x));
+                lista_glosse_noStopword = getLemsFromContexts(lista_glosse_noStopword);
+                for (ArrayList<String> lista_glossa_noStopword : lista_glosse_noStopword) {
+                    overlap += computer_overlap(lista_lemmi_contesti_pianta.get(i), lista_glossa_noStopword);
+                }
+                if (rescaling && lista_glosse_noStopword.size() > 0) {
+                    overlap /= lista_glosse_noStopword.size();
                 }
                 if (overlap > max_overlap) {
                     max_overlap = overlap;
                     index = j;
+                    num_glosses = lista_glosse_noStopword.size();
+
                 }
-            }   
+            }
             System.out.println(words[0] + " in the context '" + contestiPianta[i]
                     + "' means '" + lista_synset_parole.get(index) + "' thanks to an overlap equals"
-                    + " to " + max_overlap);
+                    + " to " + max_overlap + " and a number of glosses equal " + num_glosses);
         }
 
         lista_synset_parole = getSynsetsFromWord(words[1]);
-        
-        for(int i = 0; i < contestiTesta.length; i++)
-        {
+
+        for (int i = 0; i < contestiTesta.length; i++) {
             int max_overlap = 0;
             int index = 0;
-            for(int j = 0; j < lista_synset_parole.size(); j++)
-            {
+            int num_glosses = 0;
+            for (int j = 0; j < lista_synset_parole.size(); j++) {
                 int overlap = 0;
                 ArrayList<BabelGloss> glosse_parola = (ArrayList<BabelGloss>) lista_synset_parole.get(j).getGlosses(Language.IT);
-                ArrayList<BabelSynsetIDRelation> lista_relazioni = ( ArrayList<BabelSynsetIDRelation>) lista_synset_parole.get(j).getEdges(BabelPointer.HYPERNYM);
-                for(int k = 0; k < lista_relazioni.size(); k++)
-                {
-                    id = lista_relazioni.get(k).getBabelSynsetIDTarget();
-                    glosse_parola.addAll(bn.getSynset(id).getGlosses(Language.IT));
+                if (relations) {
+                    ArrayList<BabelSynsetIDRelation> lista_relazioni = (ArrayList<BabelSynsetIDRelation>) lista_synset_parole.get(j).getEdges(kindOfRelations);
+                    for (int k = 0; k < lista_relazioni.size(); k++) {
+                        id = lista_relazioni.get(k).getBabelSynsetIDTarget();
+                        glosse_parola.addAll(bn.getSynset(id).getGlosses(Language.IT));
+                    }
                 }
                 ArrayList<String> lista_string_glossa = new ArrayList<>();
                 ArrayList<ArrayList<String>> lista_glosse_noStopword = new ArrayList<>();
-                for(int z = 0; z < glosse_parola.size(); z++)
-                {
+                for (int z = 0; z < glosse_parola.size(); z++) {
                     lista_string_glossa.add(glosse_parola.get(z).getGloss());
                 }
                 lista_glosse_noStopword = removeStopwordsFromList(lista_string_glossa);
-                lista_glosse_noStopword = getLemsFromContexts(lista_glosse_noStopword);   
-                for(int x = 0; x < lista_glosse_noStopword.size(); x++)
-                {
+                lista_glosse_noStopword = getLemsFromContexts(lista_glosse_noStopword);
+                for (int x = 0; x < lista_glosse_noStopword.size(); x++) {
                     overlap += computer_overlap(lista_lemmi_contesti_testa.get(i), lista_glosse_noStopword.get(x));
+                }
+                if (rescaling && lista_glosse_noStopword.size() > 0) {
+                    overlap /= lista_glosse_noStopword.size();
                 }
                 if (overlap > max_overlap) {
                     max_overlap = overlap;
                     index = j;
+                    num_glosses = lista_glosse_noStopword.size();
                 }
-            }   
+            }
             System.out.println(words[1] + " in the context '" + contestiTesta[i]
-                    + "' means '" + lista_synset_parole.get(index) + "' thanks to an overlap equals"
-                    + " to " + max_overlap);
+                    + "' means '" + lista_synset_parole.get(index) + "' thanks to an overlap equal "
+                    + " to " + max_overlap + " and a number of glosses equal " + num_glosses);
         }
 
     }
-    
-     private static int computer_overlap(ArrayList<String> context,
+
+    private static int computer_overlap(ArrayList<String> context,
             ArrayList<String> gloss) {
         int count = 0;
         for (String token_context : context) {
@@ -173,15 +167,15 @@ public class Main {
         }
         return count;
     }
-    
+
     public static Set<String> getStopwords() {
-        Set<String> stopWords = new LinkedHashSet<String>();
+        Set<String> stopWords = new LinkedHashSet<>();
         BufferedReader SW;
         try {
             String line;
             SW = new BufferedReader(new FileReader("src/stopwords.txt"));
             while ((line = SW.readLine()) != null) {
-                if (line.indexOf("|") < 0 && !line.equals("")) {
+                if (!line.contains("|") && !line.equals("")) {
                     stopWords.add(line);
                 }
             }
@@ -208,34 +202,33 @@ public class Main {
         for (String word : words) {
             String clean_word = word.replaceAll("[ \\p{Punct}]", " ");
             String[] tokens = clean_word.split("[\\s]+");
-            for(String token : tokens)
-            {
-                if (!stopwords.contains(token.toLowerCase()))
+            for (String token : tokens) {
+                if (!stopwords.contains(token.toLowerCase())) {
                     array_tokens.add(token);
+                }
             }
         }
         return array_tokens;
     }
-    
-    public static ArrayList<ArrayList<String>> removeStopwordsFromList(ArrayList<String> lista){
+
+    public static ArrayList<ArrayList<String>> removeStopwordsFromList(ArrayList<String> lista) {
         ArrayList<ArrayList<String>> lista_stopwords_rimosse = new ArrayList<>();
-        for(String word : lista)
-        {
+        for (String word : lista) {
             lista_stopwords_rimosse.add(removeStopwordsFromContexts(word));
         }
         return lista_stopwords_rimosse;
     }
-    
-    public static HashMap<String,String> getLemmaMap() {
-        HashMap<String,String> lemmaMap = new HashMap<String,String>();
+
+    public static HashMap<String, String> getLemmaMap() {
+        HashMap<String, String> map = new HashMap<>();
         BufferedReader SW;
         try {
             String line;
             SW = new BufferedReader(new FileReader("src/morphit/morph-it_048.txt"));
             while ((line = SW.readLine()) != null) {
-                if (line.indexOf("|") < 0 && !line.equals("")) {
+                if (!line.contains("|") && !line.equals("")) {
                     String[] row = line.split("[\\s]+");
-                    lemmaMap.put(row[0], row[1]);
+                    map.put(row[0], row[1]);
                 }
             }
             SW.close();
@@ -247,59 +240,32 @@ public class Main {
             e.printStackTrace();
         }
 
-        return lemmaMap;
+        return map;
     }
-    
-    public static ArrayList<ArrayList<String>> getLemsFromContexts(ArrayList<ArrayList<String>> lems){
-         ArrayList<ArrayList<String>> lista_lemmi_contesti = new ArrayList<>();
-        
-        for (int i = 0; i < lems.size(); i++) {
+
+    public static ArrayList<ArrayList<String>> getLemsFromContexts(ArrayList<ArrayList<String>> lems) {
+        ArrayList<ArrayList<String>> lista_lemmi_contesti = new ArrayList<>();
+
+        for (ArrayList<String> lem : lems) {
             ArrayList<String> lemmi_contesto = new ArrayList<>();
-            for(int j = 0; j < lems.get(i).size(); j++){
-                 String lemma = lemmaMap.get(lems.get(i).get(j));
-                if(lemma != null)
-                     lemmi_contesto.add(lemma);
-                else
-                    lemmi_contesto.add(lems.get(i).get(j));
+            for (int j = 0; j < lem.size(); j++) {
+                String lemma = lemmaMap.get(lem.get(j));
+                if (lemma != null) {
+                    lemmi_contesto.add(lemma);
+                } else {
+                    lemmi_contesto.add(lem.get(j));
+                }
             }
             lista_lemmi_contesti.add(lemmi_contesto);
         }
         return lista_lemmi_contesti;
     }
-    
-    public static ArrayList<BabelSynset> getSynsetsFromWord(String word){
-        
-        
-        ArrayList<BabelSynset> lista_Synset;
-        lista_Synset = (ArrayList<BabelSynset>) bn.getSynsets(Language.IT , word);
 
-        
+    public static ArrayList<BabelSynset> getSynsetsFromWord(String word) {
+
+        ArrayList<BabelSynset> lista_Synset;
+        lista_Synset = (ArrayList<BabelSynset>) bn.getSynsets(Language.IT, word);
+
         return lista_Synset;
     }
-//  
-//    public ArrayList<ArrayList<String>> getLemsFromContexts(ArrayList<String> contexts, StanfordCoreNLP pipeline) {
-//        // creates a StanfordCoreNLP object, with POS tagging, lemmatization, NER, parsing, and coreference resolution
-//        ArrayList<ArrayList<String>> contexts_lem = new ArrayList<ArrayList<String>>();
-//        for (int i = 0; i < contexts.size(); i++) {
-//            Annotation document = new Annotation(contexts.get(i));
-//            ArrayList<String> tokens = new ArrayList<String>();
-//            // run all Annotators on this text
-//            pipeline.annotate(document);
-//
-//            List<CoreMap> sentences = document.get(SentencesAnnotation.class);
-//
-//            for (CoreMap sentence : sentences) {
-//                // traversing the words in the current sentence
-//                // a CoreLabel is a CoreMap with additional token-specific methods
-//                for (CoreLabel token : sentence.get(TokensAnnotation.class)) {
-//                    // this is the lemma of the token
-//                    String lemma = token.get(LemmaAnnotation.class);
-//                    tokens.add(lemma);
-//                }
-//            }
-//            contexts_lem.add(tokens);
-//        }
-//
-//        return contexts_lem;
-//    }
 }
